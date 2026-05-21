@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>阵列管理中心 v2.0</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #00f0ff;
+            --primary-dark: #0088aa;
+            --secondary: #a855f7;
+            --accent: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #0a0a1a;
+            --bg-light: #151530;
+            --card: rgba(255,255,255,0.04);
+            --card-hover: rgba(255,255,255,0.08);
+            --border: rgba(255,255,255,0.08);
+            --text: #e5e7eb;
+            --text-dim: #6b7280;
+            --sidebar-width: 260px;
+            --sidebar-collapsed: 70px;
+            --navbar-height: 60px;
+        }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        /* ========== 背景特效 ========== */
+        #particles { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+        .particle {
+            position: absolute; width: 3px; height: 3px;
+            border-radius: 50%; opacity: 0.3;
+            animation: particleFloat linear infinite;
+        }
+        @keyframes particleFloat {
+            0% { transform: translateY(100vh) translateX(0) scale(0); opacity: 0; }
+            10% { opacity: 0.5; }
+            90% { opacity: 0.3; }
+            100% { transform: translateY(-10vh) translateX(var(--drift)) scale(1); opacity: 0; }
+        }
+
+        .scan-line {
+            position: fixed; left: 0; width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0.15; z-index: 0; pointer-events: none;
+            animation: scanDown 8s linear infinite;
+        }
+        @keyframes scanDown { 0% { top: -2px; } 100% { top: 100%; } }
+
+        .grid-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 0;
+            background-image:
+                linear-gradient(rgba(0,240,255,0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,240,255,0.02) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        .corner-decoration {
+            position: fixed; pointer-events: none; z-index: 0;
+        }
+        .corner-tl {
+            top: 20px; left: 20px;
+            width: 80px; height: 80px;
+            border-left: 2px solid var(--primary);
+            border-top: 2px solid var(--primary);
+            opacity: 0.3;
+        }
+        .corner-br {
+            bottom: 20px; right: 20px;
+            width: 80px; height: 80px;
+            border-right: 2px solid var(--primary);
+            border-bottom: 2px solid var(--primary);
+            opacity: 0.3;
+        }
+
+        /* ========== 侧边栏 ========== */
+        .sidebar {
+            position: fixed; left: 0; top: 0;
+            width: var(--sidebar-width); height: 100vh;
+            background: linear-gradient(180deg, rgba(10,10,26,0.98), rgba(10,10,26,0.95));
+            border-right: 1px solid var(--border);
+            backdrop-filter: blur(20px);
+            z-index: 200;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; flex-direction: column;
+        }
+        .sidebar.collapsed { width: var(--sidebar-collapsed); }
+        .sidebar.collapsed .sidebar-text,
+        .sidebar.collapsed .nav-label,
+        .sidebar.collapsed .sidebar-footer-text { display: none; }
+        .sidebar.collapsed .sidebar-header { justify-content: center; padding: 0 15px; }
+        .sidebar.collapsed .nav-item { justify-content: center; padding: 12px 0; }
+
+        .sidebar-header {
+            display: flex; align-items: center; gap: 12px;
+            padding: 20px; border-bottom: 1px solid var(--border);
+            min-height: 70px;
+        }
+        .sidebar-logo {
+            width: 36px; height: 36px; flex-shrink: 0;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+            animation: logoPulse 3s ease-in-out infinite;
+        }
+        @keyframes logoPulse {
+            0%, 100% { box-shadow: 0 0 15px rgba(0,240,255,0.4); }
+            50% { box-shadow: 0 0 30px rgba(0,240,255,0.6), 0 0 50px rgba(168,85,247,0.3); }
+        }
+        .sidebar-text { font-size: 16px; font-weight: 700; color: var(--primary); letter-spacing: 2px; white-space: nowrap; }
+
+        .sidebar-nav { flex: 1; padding: 15px 0; overflow-y: auto; }
+        .nav-section { margin-bottom: 10px; }
+        .nav-section-title {
+            padding: 8px 20px; font-size: 11px; color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .sidebar.collapsed .nav-section-title { display: none; }
+
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 20px; margin: 2px 10px;
+            border-radius: 8px; cursor: pointer;
+            transition: all 0.2s; color: var(--text-dim);
+            position: relative; overflow: hidden;
+        }
+        .nav-item::before {
+            content: ''; position: absolute; left: 0; top: 0;
+            width: 3px; height: 100%; background: var(--primary);
+            transform: scaleY(0); transition: transform 0.2s;
+        }
+        .nav-item:hover { background: var(--card-hover); color: var(--text); }
+        .nav-item.active { background: var(--card-hover); color: var(--primary); }
+        .nav-item.active::before { transform: scaleY(1); }
+        .nav-item .icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+        .nav-item .badge {
+            margin-left: auto; padding: 2px 8px;
+            background: var(--danger); border-radius: 10px;
+            font-size: 11px; color: #fff;
+        }
+
+        .sidebar-footer {
+            padding: 15px 20px; border-top: 1px solid var(--border);
+            display: flex; align-items: center; gap: 12px;
+        }
+        .user-avatar {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; flex-shrink: 0;
+        }
+        .sidebar-footer-text { font-size: 13px; }
+        .sidebar-footer-text .name { font-weight: 600; color: var(--text); }
+        .sidebar-footer-text .role { font-size: 11px; color: var(--text-dim); }
+
+        /* ========== 主内容区 ========== */
+        .main-wrapper {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .sidebar.collapsed ~ .main-wrapper { margin-left: var(--sidebar-collapsed); }
+
+        .topbar {
+            position: sticky; top: 0;
+            padding: 0 30px; height: var(--navbar-height);
+            background: rgba(10,10,26,0.9);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+            z-index: 100;
+        }
+        .topbar-left { display: flex; align-items: center; gap: 15px; }
+        .toggle-sidebar {
+            width: 36px; height: 36px; border: 1px solid var(--border);
+            border-radius: 8px; background: var(--card);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; color: var(--text-dim);
+        }
+        .toggle-sidebar:hover { border-color: var(--primary); color: var(--primary); }
+
+        .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text-dim); }
+        .breadcrumb .current { color: var(--text); }
+
+        .topbar-right { display: flex; align-items: center; gap: 15px; }
+        .topbar-btn {
+            width: 36px; height: 36px; border: 1px solid var(--border);
+            border-radius: 8px; background: var(--card);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; transition: all 0.2s; color: var(--text-dim);
+            position: relative;
+        }
+        .topbar-btn:hover { border-color: var(--primary); color: var(--primary); }
+        .topbar-btn .dot {
+            position: absolute; top: 6px; right: 6px;
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--danger); border: 2px solid var(--bg);
+        }
+
+        .system-status {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 12px; border-radius: 20px;
+            background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2);
+            font-size: 12px; color: var(--accent);
+        }
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--accent);
+            animation: blink 1.5s ease-in-out infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        .content { padding: 25px 30px; position: relative; z-index: 1; }
+
+        /* ========== 通用组件 ========== */
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s;
+            position: relative; overflow: hidden;
+        }
+        .card:hover { border-color: rgba(0,240,255,0.2); box-shadow: 0 4px 20px rgba(0,240,255,0.1); }
+        .card::after {
+            content: ''; position: absolute; top: 0; left: 0;
+            width: 100%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), transparent);
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .card:hover::after { opacity: 1; }
+
+        .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+        .card-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .card-title .icon { color: var(--primary); }
+        .card-actions { display: flex; gap: 8px; }
+
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px;
+            cursor: pointer; font-size: 13px; transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--secondary)); color: #000; font-weight: 600; }
+        .btn-primary:hover { box-shadow: 0 0 20px rgba(0,240,255,0.4); transform: translateY(-1px); }
+        .btn-secondary { background: var(--card); border: 1px solid var(--border); color: var(--text); }
+        .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+        .btn-success { background: rgba(34,197,94,0.15); color: var(--accent); border: 1px solid rgba(34,197,94,0.3); }
+        .btn-success:hover { background: rgba(34,197,94,0.25); }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-xs { padding: 3px 8px; font-size: 11px; }
+
+        .badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+        }
+        .badge-online { background: rgba(34,197,94,0.15); color: var(--accent); }
+        .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .badge-offline { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .badge-info { background: rgba(0,240,255,0.1); color: var(--primary); }
+
+        .progress-bar { height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
+        .tag {
+            display: inline-block; padding: 3px 8px; border-radius: 4px;
+            font-size: 11px; background: var(--card); border: 1px solid var(--border);
+        }
+
+        /* ========== 仪表盘概览 ========== */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-bottom: 25px; }
+        .stat-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 20px;
+            position: relative; overflow: hidden;
+            transition: all 0.3s; cursor: pointer;
+        }
+        .stat-card:hover { transform: translateY(-3px); border-color: rgba(0,240,255,0.3); }
+        .stat-card .glow {
+            position: absolute; top: -30px; right: -30px;
+            width: 80px; height: 80px; border-radius: 50%;
+            filter: blur(25px); opacity: 0.3;
+        }
+        .stat-card .stat-icon { font-size: 28px; margin-bottom: 12px; }
+        .stat-card .stat-value {
+            font-size: 28px; font-weight: 700; margin-bottom: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        .stat-card .stat-label { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+        .stat-card .stat-trend {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-size: 12px; padding: 3px 8px; border-radius: 12px;
+        }
+        .trend-up { background: rgba(34,197,94,0.1); color: var(--accent); }
+        .trend-down { background: rgba(239,68,68,0.1); color: var(--danger); }
+
+        /* ========== 图表区域 ========== */
+        .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; margin-bottom: 25px; }
+        .charts-row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 25px; }
+        .charts-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 25px; }
+
+        .chart-container { height: 200px; position: relative; }
+        canvas { width: 100% !important; height: 100% !important; }
+
+        .gauge-container { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .gauge-value { font-size: 24px; font-weight: 700; font-family: 'Courier New', monospace; }
+        .gauge-label { font-size: 12px; color: var(--text-dim); }
+
+        /* ========== 实时监控 ========== */
+        .monitor-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px; }
+        .monitor-card {
+            background: linear-gradient(135deg, rgba(0,240,255,0.03), rgba(168,85,247,0.03));
+            border: 1px solid var(--border);
+            border-radius: 10px; padding: 18px;
+            text-align: center; position: relative; overflow: hidden;
+        }
+        .monitor-card::before {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(0,240,255,0.1) 0%, transparent 60%);
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .monitor-card:hover::before { opacity: 1; }
+        .monitor-icon { font-size: 24px; margin-bottom: 10px; }
+        .monitor-value { font-size: 26px; font-weight: 700; font-family: 'Courier New', monospace; color: var(--primary); }
+        .monitor-label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+        .live-indicator {
+            position: absolute; top: 10px; right: 10px;
+            display: flex; align-items: center; gap: 4px;
+            font-size: 10px; color: var(--danger);
+        }
+        .live-indicator::before {
+            content: ''; width: 6px; height: 6px; border-radius: 50%;
+            background: var(--danger); animation: blink 1s infinite;
+        }
+
+        /* ========== 网络拓扑 ========== */
+        .topology-container { position: relative; height: 280px; }
+        .topology-svg { width: 100%; height: 100%; }
+        .topology-node {
+            cursor: pointer; transition: all 0.2s;
+        }
+        .topology-node:hover { filter: brightness(1.2); }
+        .topology-label { font-size: 10px; fill: var(--text); text-anchor: middle; }
+        .topology-line { stroke: var(--border); stroke-width: 2; }
+        .topology-line.active { stroke: var(--primary); stroke-width: 2; animation: dataFlow 1s linear infinite; }
+        @keyframes dataFlow {
+            0% { stroke-dashoffset: 0; }
+            100% { stroke-dashoffset: -20; }
+        }
+
+        /* ========== 设备列表 ========== */
+        .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
+        .device-card {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 18px;
+            transition: all 0.3s; cursor: pointer;
+        }
+        .device-card:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .device-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
+        .device-icon {
+            width: 40px; height: 40px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px;
+        }
+        .device-icon.storage { background: rgba(0,240,255,0.1); }
+        .device-icon.compute { background: rgba(168,85,247,0.1); }
+        .device-icon.network { background: rgba(34,197,94,0.1); }
+        .device-name { font-weight: 600; font-size: 14px; }
+        .device-ip { font-size: 12px; color: var(--text-dim); font-family: 'Courier New', monospace; }
+        .device-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .device-stat { text-align: center; }
+        .device-stat .value { font-size: 16px; font-weight: 600; font-family: 'Courier New', monospace; }
+        .device-stat .label { font-size: 11px; color: var(--text-dim); }
+        .device-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+        /* ========== 告警面板 ========== */
+        .alerts-panel { display: flex; flex-direction: column; gap: 10px; max-height: 350px; overflow-y: auto; }
+        .alert-item {
+            display: flex; align-items: flex-start; gap: 12px;
+            padding: 12px; background: rgba(0,0,0,0.2);
+            border-radius: 8px; border-left: 3px solid var(--warning);
+            transition: all 0.2s;
+        }
+        .alert-item:hover { background: rgba(0,0,0,0.3); }
+        .alert-item.critical { border-left-color: var(--danger); }
+        .alert-item.info { border-left-color: var(--primary); }
+        .alert-icon { font-size: 20px; flex-shrink: 0; margin-top: 2px; }
+        .alert-content { flex: 1; }
+        .alert-message { font-size: 13px; margin-bottom: 4px; }
+        .alert-meta { font-size: 11px; color: var(--text-dim); }
+        .alert-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+        /* ========== 实时日志 ========== */
+        .log-container {
+            background: rgba(0,0,0,0.3); border: 1px solid var(--border);
+            border-radius: 8px; padding: 15px;
+            font-family: 'Courier New', monospace; font-size: 12px;
+            height: 250px; overflow-y: auto; line-height: 1.6;
+        }
+        .log-entry { animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        .log-time { color: var(--text-dim); }
+        .log-level { padding: 1px 6px; border-radius: 3px; font-size: 10px; margin: 0 8px; }
+        .log-level.info { background: rgba(0,240,255,0.1); color: var(--primary); }
+        .log-level.warn { background: rgba(245,158,11,0.1); color: var(--warning); }
+        .log-level.error { background: rgba(239,68,68,0.1); color: var(--danger); }
+        .log-level.success { background: rgba(34,197,94,0.1); color: var(--accent); }
+
+        /* ========== 快捷操作 ========== */
+        .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+        .quick-action {
+            display: flex; flex-direction: column; align-items: center; gap: 10px;
+            padding: 20px; background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; cursor: pointer; transition: all 0.3s;
+        }
+        .quick-action:hover {
+            border-color: var(--primary);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,240,255,0.15);
+        }
+        .quick-action .icon { font-size: 28px; }
+        .quick-action .label { font-size: 13px; color: var(--text); }
+
+        /* ========== 活动时间线 ========== */
+        .timeline { position: relative; padding-left: 25px; }
+        .timeline::before {
+            content: ''; position: absolute; left: 8px; top: 0; bottom: 0;
+            width: 2px; background: var(--border);
+        }
+        .timeline-item { position: relative; padding-bottom: 20px; }
+        .timeline-item::before {
+            content: ''; position: absolute; left: -21px; top: 4px;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: var(--primary); border: 2px solid var(--bg);
+        }
+        .timeline-item.success::before { background: var(--accent); }
+        .timeline-item.warning::before { background: var(--warning); }
+        .timeline-item.error::before { background: var(--danger); }
+        .timeline-time { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+        .timeline-content { font-size: 13px; }
+
+        /* ========== 模态框 ========== */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);
+            z-index: 1000; align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: var(--bg-light); border: 1px solid var(--border);
+            border-radius: 16px; padding: 25px;
+            width: 90%; max-width: 550px; max-height: 80vh; overflow-y: auto;
+            animation: modalSlide 0.3s ease;
+        }
+        @keyframes modalSlide { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-title { font-size: 18px; font-weight: 600; color: var(--primary); }
+        .modal-close { cursor: pointer; font-size: 20px; color: var(--text-dim); transition: color 0.2s; }
+        .modal-close:hover { color: var(--text); }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--border); }
+
+        /* ========== 通知 ========== */
+        .notification-container { position: fixed; top: 80px; right: 30px; z-index: 1001; display: flex; flex-direction: column; gap: 10px; }
+        .notification {
+            padding: 12px 20px; border-radius: 10px;
+            background: var(--bg-light); border: 1px solid var(--border);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            animation: notifIn 0.3s ease, notifOut 0.3s ease 2.7s forwards;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .notification.success { border-color: var(--accent); }
+        .notification.warning { border-color: var(--warning); }
+        .notification.error { border-color: var(--danger); }
+        @keyframes notifIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes notifOut { to { transform: translateX(100%); opacity: 0; } }
+
+        /* ========== 滚动条 ========== */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+        /* ========== 响应式 ========== */
+        @media (max-width: 1400px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-row { grid-template-columns: 1fr; }
+            .charts-row-3 { grid-template-columns: 1fr 1fr; }
+            .monitor-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 1024px) {
+            .sidebar { transform: translateX(-100%); width: var(--sidebar-width); }
+            .sidebar.mobile-open { transform: translateX(0); }
+            .main-wrapper { margin-left: 0 !important; }
+            .charts-row-3 { grid-template-columns: 1fr; }
+            .quick-actions { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: 1fr; }
+            .monitor-grid { grid-template-columns: 1fr; }
+            .content { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-overlay"></div>
+    <div class="scan-line"></div>
+    <div class="corner-decoration corner-tl"></div>
+    <div class="corner-decoration corner-br"></div>
+    <div id="particles"></div>
+
+    <!-- 侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">⚡</div>
+            <span class="sidebar-text">ARRAY MANAGER</span>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-section">
+                <div class="nav-section-title">主要功能</div>
+            </div>
+            <div class="nav-item active" data-page="dashboard">
+                <span class="icon">📊</span><span class="nav-label">仪表盘</span>
+            </div>
+            <div class="nav-item" data-page="array">
+                <span class="icon">🔧</span><span class="nav-label">阵列管理</span>
+            </div>
+            <div class="nav-item" data-page="devices">
+                <span class="icon">💻</span><span class="nav-label">设备列表</span>
+            </div>
+            <div class="nav-item" data-page="monitor">
+                <span class="icon">📡</span><span class="nav-label">实时监控</span>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">系统管理</div>
+            </div>
+            <div class="nav-item" data-page="alerts">
+                <span class="icon">🔔</span><span class="nav-label">告警中心</span>
+                <span class="badge" id="alertBadge">4</span>
+            </div>
+            <div class="nav-item" data-page="logs">
+                <span class="icon">📝</span><span class="nav-label">系统日志</span>
+            </div>
+            <div class="nav-item" data-page="topology">
+                <span class="icon">🌐</span><span class="nav-label">网络拓扑</span>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">配置</div>
+            </div>
+            <div class="nav-item" data-page="settings">
+                <span class="icon">⚙️</span><span class="nav-label">系统设置</span>
+            </div>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-avatar">👤</div>
+            <div class="sidebar-footer-text">
+                <div class="name">管理员</div>
+                <div class="role">超级管理员</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 主内容 -->
+    <div class="main-wrapper" id="mainWrapper">
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="toggle-sidebar" id="toggleSidebar">☰</div>
+                <div class="breadcrumb">
+                    <span>首页</span><span>/</span><span class="current" id="breadcrumbCurrent">仪表盘</span>
+                </div>
+            </div>
+            <div class="topbar-right">
+                <div class="system-status">
+                    <span class="status-dot"></span>
+                    <span>系统运行正常</span>
+                </div>
+                <div class="topbar-btn" id="notifBtn">
+                    🔔<span class="dot"></span>
+                </div>
+                <div class="topbar-btn" onclick="showSettingsModal()">⚙️</div>
+                <div class="topbar-btn">👤</div>
+            </div>
+        </header>
+
+        <main class="content" id="content">
+            <!-- 内容通过 JS 动态渲染 -->
+        </main>
+    </div>
+
+    <!-- 模态框 -->
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title" id="modalTitle">对话框</span>
+                <span class="modal-close" onclick="closeModal()">×</span>
+            </div>
+            <div id="modalContent"></div>
+            <div class="modal-footer" id="modalFooter"></div>
+        </div>
+    </div>
+
+    <!-- 通知容器 -->
+    <div class="notification-container" id="notifContainer"></div>
+
+    <script>
+        // ==================== 数据 ====================
+        const devices = [
+            {id:'ARRAY-001',name:'存储节点-A1',ip:'192.168.1.101',type:'storage',status:'online',cpu:45,memory:62,storage:78,uptime:'12d 8h',temp:42,network:1250,iops:8500},
+            {id:'ARRAY-002',name:'存储节点-A2',ip:'192.168.1.102',type:'storage',status:'online',cpu:38,memory:55,storage:82,uptime:'8d 15h',temp:38,network:980,iops:7200},
+            {id:'ARRAY-003',name:'计算节点-C1',ip:'192.168.1.103',type:'compute',status:'online',cpu:72,memory:78,storage:45,uptime:'5d 2h',temp:55,network:2100,iops:5600},
+            {id:'ARRAY-004',name:'计算节点-C2',ip:'192.168.1.104',type:'compute',status:'warning',cpu:91,memory:89,storage:67,uptime:'3d 10h',temp:68,network:1850,iops:9200},
+            {id:'ARRAY-005',name:'网络节点-N1',ip:'192.168.1.105',type:'network',status:'online',cpu:23,memory:34,storage:22,uptime:'20d 1h',temp:35,network:5500,iops:3200},
+            {id:'ARRAY-006',name:'存储节点-A3',ip:'192.168.1.106',type:'storage',status:'offline',cpu:0,memory:0,storage:0,uptime:'N/A',temp:0,network:0,iops:0},
+            {id:'ARRAY-007',name:'存储节点-A4',ip:'192.168.1.107',type:'storage',status:'online',cpu:56,memory:68,storage:71,uptime:'15d 6h',temp:44,network:1420,iops:7800},
+            {id:'ARRAY-008',name:'计算节点-C3',ip:'192.168.1.108',type:'compute',status:'online',cpu:41,memory:52,storage:38,uptime:'7d 12h',temp:48,network:1650,iops:6100},
+            {id:'ARRAY-009',name:'管理节点-M1',ip:'192.168.1.109',type:'network',status:'online',cpu:18,memory:42,storage:15,uptime:'30d 4h',temp:32,network:890,iops:2100},
+            {id:'ARRAY-010',name:'存储节点-A5',ip:'192.168.1.110',type:'storage',status:'warning',cpu:85,memory:76,storage:93,uptime:'2d 18h',temp:62,network:1980,iops:8900},
+            {id:'ARRAY-011',name:'计算节点-C4',ip:'192.168.1.111',type:'compute',status:'online',cpu:62,memory:71,storage:54,uptime:'10d 3h',temp:51,network:2300,iops:7400},
+            {id:'ARRAY-012',name:'存储节点-A6',ip:'192.168.1.112',type:'storage',status:'online',cpu:33,memory:47,storage:65,uptime:'18d 9h',temp:40,network:1100,iops:6800}
+        ];
+
+        const alerts = [
+            {id:1,deviceId:'ARRAY-004',message:'CPU使用率超过90%，系统性能可能受到影响',severity:'critical',time:Date.now()-300000},
+            {id:2,deviceId:'ARRAY-010',message:'存储使用率已达93%，请及时清理或扩容',severity:'warning',time:Date.now()-600000},
+            {id:3,deviceId:'ARRAY-006',message:'设备连接超时，已标记为离线状态',severity:'critical',time:Date.now()-1800000},
+            {id:4,deviceId:'ARRAY-004',message:'核心温度达到68°C，接近警戒阈值',severity:'warning',time:Date.now()-120000}
+        ];
+
+        const logs = [
+            {time:'10:42:15',level:'info',msg:'系统启动完成，所有服务正常运行'},
+            {time:'10:42:18',level:'success',msg:'存储节点-A1 同步完成'},
+            {time:'10:43:05',level:'warn',msg:'计算节点-C2 CPU负载偏高: 91%'},
+            {time:'10:44:22',level:'info',msg:'自动备份任务启动'},
+            {time:'10:45:01',level:'error',msg:'存储节点-A3 连接超时'},
+            {time:'10:46:33',level:'success',msg:'备份任务完成，耗时 2m 11s'},
+            {time:'10:47:12',level:'warn',msg:'存储节点-A5 存储空间不足: 93%'},
+            {time:'10:48:45',level:'info',msg:'网络拓扑自动更新'},
+        ];
+
+        const deviceTypes = {
+            storage:{name:'存储节点',icon:'💾',color:'#00f0ff'},
+            compute:{name:'计算节点',icon:'💻',color:'#a855f7'},
+            network:{name:'网络节点',icon:'🌐',color:'#22c55e'}
+        };
+
+        let currentPage = 'dashboard';
+        let cpuHistory = [45,48,52,47,55,62,58,51,49,53,57,61,56,52,48,54,59,63,58,55];
+        let memoryHistory = [62,65,63,68,71,69,66,70,72,68,65,67,70,73,71,69,66,68,71,74];
+        let networkHistory = [1200,1350,1100,1450,1280,1500,1320,1180,1400,1250,1550,1380,1200,1480,1320,1250,1400,1350,1280,1200];
+        let uptimeSeconds = 86400;
+
+        // ==================== 初始化 ====================
+        function init() {
+            initParticles();
+            initSidebar();
+            initNav();
+            renderPage('dashboard');
+            setInterval(updateRealtime, 2000);
+            setInterval(addLog, 5000);
+            setInterval(updateUptime, 1000);
+        }
+
+        function initParticles() {
+            const container = document.getElementById('particles');
+            const colors = ['#00f0ff', '#a855f7', '#22c55e', '#f59e0b'];
+            for (let i = 0; i < 50; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                p.style.left = Math.random() * 100 + '%';
+                p.style.background = colors[Math.floor(Math.random() * colors.length)];
+                p.style.setProperty('--drift', (Math.random() * 100 - 50) + 'px');
+                p.style.animationDelay = Math.random() * 20 + 's';
+                p.style.animationDuration = (15 + Math.random() * 15) + 's';
+                p.style.width = p.style.height = (2 + Math.random() * 3) + 'px';
+                container.appendChild(p);
+            }
+        }
+
+        function initSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            document.getElementById('toggleSidebar').addEventListener('click', () => {
+                sidebar.classList.toggle('collapsed');
+                if (window.innerWidth <= 1024) {
+                    sidebar.classList.toggle('mobile-open');
+                }
+            });
+        }
+
+        function initNav() {
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+                    const page = item.dataset.page;
+                    currentPage = page;
+                    document.getElementById('breadcrumbCurrent').textContent = getBreadcrumbText(page);
+                    renderPage(page);
+                    if (window.innerWidth <= 1024) {
+                        document.getElementById('sidebar').classList.remove('mobile-open');
+                    }
+                });
+            });
+        }
+
+        function getBreadcrumbText(page) {
+            const map = {dashboard:'仪表盘',array:'阵列管理',devices:'设备列表',monitor:'实时监控',alerts:'告警中心',logs:'系统日志',topology:'网络拓扑',settings:'系统设置'};
+            return map[page] || page;
+        }
+
+        // ==================== 页面渲染 ====================
+        function renderPage(page) {
+            const content = document.getElementById('content');
+            switch(page) {
+                case 'dashboard': content.innerHTML = renderDashboard(); break;
+                case 'array': content.innerHTML = renderArray(); break;
+                case 'devices': content.innerHTML = renderDevices(); break;
+                case 'monitor': content.innerHTML = renderMonitor(); break;
+                case 'alerts': content.innerHTML = renderAlerts(); break;
+                case 'logs': content.innerHTML = renderLogs(); break;
+                case 'topology': content.innerHTML = renderTopology(); break;
+                case 'settings': content.innerHTML = renderSettings(); break;
+            }
+            afterRender(page);
+        }
+
+        function afterRender(page) {
+            if (['dashboard','monitor'].includes(page)) {
+                setTimeout(() => {
+                    drawChart('cpuChart', cpuHistory, '#00f0ff');
+                    drawChart('memoryChart', memoryHistory, '#a855f7');
+                    if (page === 'dashboard') {
+                        drawGauge('gauge1', 67, '#00f0ff');
+                        drawGauge('gauge2', 74, '#a855f7');
+                        drawGauge('gauge3', 45, '#22c55e');
+                        drawBarChart();
+                    }
+                }, 50);
+            }
+            if (page === 'topology') {
+                setTimeout(drawTopology, 50);
+            }
+            if (page === 'logs') {
+                setTimeout(() => {
+                    const logContainer = document.querySelector('.log-container');
+                    if (logContainer) logContainer.scrollTop = logContainer.scrollHeight;
+                }, 50);
+            }
+        }
+
+        // ==================== 仪表盘 ====================
+        function renderDashboard() {
+            const online = devices.filter(d => d.status === 'online').length;
+            const warning = devices.filter(d => d.status === 'warning').length;
+            const offline = devices.filter(d => d.status === 'offline').length;
+            const avgCpu = Math.round(devices.filter(d => d.status !== 'offline').reduce((s,d) => s + d.cpu, 0) / (online + warning));
+
+            return `
+                <div class="stats-grid">
+                    <div class="stat-card" style="--glow:#00f0ff">
+                        <div class="glow" style="background:var(--primary)"></div>
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-value" style="color:var(--primary)">${devices.length}</div>
+                        <div class="stat-label">总设备数</div>
+                        <div class="stat-trend trend-up">↑ 较上周 +2</div>
+                    </div>
+                    <div class="stat-card" style="--glow:#22c55e">
+                        <div class="glow" style="background:var(--accent)"></div>
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-value" style="color:var(--accent)">${online}</div>
+                        <div class="stat-label">在线设备</div>
+                        <div class="stat-trend trend-up">↑ ${Math.round(online/devices.length*100)}%</div>
+                    </div>
+                    <div class="stat-card" style="--glow:#f59e0b">
+                        <div class="glow" style="background:var(--warning)"></div>
+                        <div class="stat-icon">⚠️</div>
+                        <div class="stat-value" style="color:var(--warning)">${warning}</div>
+                        <div class="stat-label">告警设备</div>
+                        <div class="stat-trend trend-down">↓ 需要关注</div>
+                    </div>
+                    <div class="stat-card" style="--glow:#a855f7">
+                        <div class="glow" style="background:var(--secondary)"></div>
+                        <div class="stat-icon">💻</div>
+                        <div class="stat-value" style="color:var(--secondary)">${avgCpu}%</div>
+                        <div class="stat-label">平均CPU</div>
+                        <div class="stat-trend trend-up">↑ ${avgCpu > 60 ? '负载较高' : '运行正常'}</div>
+                    </div>
+                </div>
+
+                <div class="charts-row">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><span class="icon">📈</span>CPU & 内存使用趋势</span>
+                            <div class="card-actions">
+                                <button class="btn btn-sm btn-secondary">1小时</button>
+                                <button class="btn btn-sm btn-primary">24小时</button>
+                                <button class="btn btn-sm btn-secondary">7天</button>
+                            </div>
+                        </div>
+                        <div class="chart-container"><canvas id="cpuChart"></canvas></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><span class="icon">📊</span>设备类型分布</span>
+                        </div>
+                        <div class="chart-container"><canvas id="barChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="charts-row-3">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><span class="icon">⚡</span>CPU 负载</span>
+                        </div>
+                        <div class="gauge-container"><canvas id="gauge1"></canvas><div class="gauge-label">当前负载</div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><span class="icon">🧠</span>内存使用</span>
+                        </div>
+                        <div class="gauge-container"><canvas id="gauge2"></canvas><div class="gauge-label">已用/总量</div></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><span class="icon">💾</span>存储使用</span>
+                        </div>
+                        <div class="gauge-container"><canvas id="gauge3"></canvas><div class="gauge-label">已用/总量</div></div>
+                    </div>
+                </div>
+
+                <div class="charts-row-2">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><span class="icon">🔔</span>最新告警</span>
+                            <button class="btn btn-sm btn-secondary" onclick="navigateTo('alerts')">查看全部</button>
+                        </div>
+                        <div class="alerts-panel">
+                            ${alerts.slice(0, 3).map(a => `
+                                <div class="alert-item ${a.severity === 'critical' ? 'critical' : ''}">
+                                    <span class="alert-icon">${a.severity === 'critical' ? '🚨' : '⚠️'}</span>
+                                    <div class="alert-content">
+                                        <div class="alert-message">${a.message}</div>
+                                        <div class="alert-meta">${a.deviceId} · ${formatTime(a.time)}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-title"><span class="icon">📝</span>系统日志</span>
+                            <button class="btn btn-sm btn-secondary" onclick="navigateTo('logs')">查看全部</button>
+                        </div>
+                        <div class="log-container" style="height:200px">
+                            ${logs.slice(-5).map(l => `
+                                <div class="log-entry">
+                                    <span class="log-time">[${l.time}]</span>
+                                    <span class="log-level ${l.level}">${l.level.toUpperCase()}</span>
+                                    ${l.msg}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span class="icon">⚡</span>快捷操作</span>
+                    </div>
+                    <div class="quick-actions">
+                        <div class="quick-action" onclick="showAddDeviceModal()"><span class="icon">➕</span><span class="label">添加设备</span></div>
+                        <div class="quick-action" onclick="showNotification('阵列同步已启动','success')"><span class="icon">🔄</span><span class="label">同步阵列</span></div>
+                        <div class="quick-action" onclick="showNotification('全量扫描已开始','info')"><span class="icon">🔍</span><span class="label">健康检查</span></div>
+                        <div class="quick-action" onclick="showNotification('备份任务已创建','success')"><span class="icon">💿</span><span class="label">创建备份</span></div>
+                        <div class="quick-action" onclick="showNotification('正在重启服务...','warning')"><span class="icon">🔁</span><span class="label">重启服务</span></div>
+                        <div class="quick-action" onclick="showNotification('报告生成中...','info')"><span class="icon">📄</span><span class="label">生成报告</span></div>
+                        <div class="quick-action" onclick="showNotification('缓存已清除','success')"><span class="icon">🗑️</span><span class="label">清除缓存</span></div>
+                        <div class="quick-action" onclick="navigateTo('settings')"><span class="icon">⚙️</span><span class="label">系统设置</span></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 阵列管理 ====================
+        function renderArray() {
+            return `
+                <div class="card" style="margin-bottom:20px">
+                    <div class="card-header">
+                        <span class="card-title"><span class="icon">🔧</span>阵列布局视图</span>
+                        <div class="card-actions">
+                            <button class="btn btn-sm btn-primary" onclick="showAddDeviceModal()">添加设备</button>
+                            <button class="btn btn-sm btn-secondary" onclick="showNotification('阵列数据已刷新','success')">刷新</button>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px">
+                        ${devices.map(d => `
+                            <div class="device-card" style="padding:15px;text-align:center" onclick="showDeviceDetail('${d.id}')">
+                                <div style="font-size:24px;margin-bottom:8px">${deviceTypes[d.type].icon}</div>
+                                <div style="font-size:12px;font-weight:600">${d.id}</div>
+                                <div style="margin:8px 0"><span class="badge badge-${d.status}">${d.status==='online'?'在线':d.status==='warning'?'警告':'离线'}</span></div>
+                                <div class="progress-bar"><div class="progress-fill" style="width:${d.storage}%;background:${d.type==='storage'?'var(--primary)':d.type==='compute'?'var(--secondary)':'var(--accent)'}"></div></div>
+                                <div style="font-size:10px;color:var(--text-dim);margin-top:4px">${d.storage}%</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="charts-row-2">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title"><span class="icon">📊</span>阵列性能概览</span></div>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:15px;text-align:center">
+                            <div><div style="font-size:28px;font-weight:700;color:var(--primary)">${Math.round(devices.reduce((s,d)=>s+d.iops,0)/devices.length).toLocaleString()}</div><div style="font-size:12px;color:var(--text-dim)">平均 IOPS</div></div>
+                            <div><div style="font-size:28px;font-weight:700;color:var(--secondary)">${(devices.reduce((s,d)=>s+d.network,0)/devices.length/1000).toFixed(1)} GB/s</div><div style="font-size:12px;color:var(--text-dim)">平均带宽</div></div>
+                            <div><div style="font-size:28px;font-weight:700;color:var(--accent)">${Math.round(devices.filter(d=>d.status!=='offline').reduce((s,d)=>s+d.temp,0)/devices.filter(d=>d.status!=='offline').length)}°C</div><div style="font-size:12px;color:var(--text-dim)">平均温度</div></div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title"><span class="icon">⏱️</span>活动时间线</span></div>
+                        <div class="timeline">
+                            <div class="timeline-item success"><div class="timeline-time">10:48</div><div class="timeline-content">网络拓扑自动更新完成</div></div>
+                            <div class="timeline-item warning"><div class="timeline-time">10:47</div><div class="timeline-content">存储节点-A5 存储空间不足</div></div>
+                            <div class="timeline-item success"><div class="timeline-time">10:46</div><div class="timeline-content">备份任务完成</div></div>
+                            <div class="timeline-item error"><div class="timeline-time">10:45</div><div class="timeline-content">存储节点-A3 连接超时</div></div>
+                            <div class="timeline-item"><div class="timeline-time">10:44</div><div class="timeline-content">自动备份任务启动</div></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 设备列表 ====================
+        function renderDevices() {
+            return `
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span class="icon">💻</span>设备列表</span>
+                        <div class="card-actions">
+                            <input type="text" id="deviceSearch" placeholder="搜索设备..." style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px;width:180px">
+                            <select id="deviceFilter" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:13px">
+                                <option value="all">全部</option><option value="online">在线</option><option value="warning">警告</option><option value="offline">离线</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm" onclick="showAddDeviceModal()">➕ 添加</button>
+                        </div>
+                    </div>
+                    <div class="device-grid" id="deviceGrid">
+                        ${devices.map(d => `
+                            <div class="device-card" data-id="${d.id}" data-status="${d.status}" onclick="showDeviceDetail('${d.id}')">
+                                <div class="device-card-header">
+                                    <div class="device-icon ${d.type}">${deviceTypes[d.type].icon}</div>
+                                    <div>
+                                        <div class="device-name">${d.name}</div>
+                                        <div class="device-ip">${d.ip}</div>
+                                    </div>
+                                    <span class="badge badge-${d.status}" style="margin-left:auto">${d.status==='online'?'在线':d.status==='warning'?'警告':'离线'}</span>
+                                </div>
+                                <div class="device-stats">
+                                    <div class="device-stat"><div class="value" style="color:var(--primary)">${d.cpu}%</div><div class="label">CPU</div></div>
+                                    <div class="device-stat"><div class="value" style="color:var(--secondary)">${d.memory}%</div><div class="label">内存</div></div>
+                                    <div class="device-stat"><div class="value" style="color:var(--accent)">${d.storage}%</div><div class="label">存储</div></div>
+                                </div>
+                                <div style="margin-top:10px;display:flex;gap:6px">
+                                    <div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${d.cpu}%;background:var(--primary)"></div></div>
+                                    <div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${d.memory}%;background:var(--secondary)"></div></div>
+                                    <div class="progress-bar" style="flex:1"><div class="progress-fill" style="width:${d.storage}%;background:var(--accent)"></div></div>
+                                </div>
+                                <div class="device-footer">
+                                    <span class="tag">${deviceTypes[d.type].name}</span>
+                                    <span style="font-size:12px;color:var(--text-dim)">⏱️ ${d.uptime}</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 实时监控 ====================
+        function renderMonitor() {
+            const onlineDevices = devices.filter(d => d.status !== 'offline');
+            return `
+                <div class="monitor-grid">
+                    <div class="monitor-card"><div class="live-indicator">LIVE</div><div class="monitor-icon">💻</div><div class="monitor-value" id="monCpu">55%</div><div class="monitor-label">CPU 使用率</div></div>
+                    <div class="monitor-card"><div class="live-indicator">LIVE</div><div class="monitor-icon">🧠</div><div class="monitor-value" id="monMem">74%</div><div class="monitor-label">内存使用率</div></div>
+                    <div class="monitor-card"><div class="live-indicator">LIVE</div><div class="monitor-icon">🌐</div><div class="monitor-value" id="monNet">1.2 GB/s</div><div class="monitor-label">网络带宽</div></div>
+                    <div class="monitor-card"><div class="live-indicator">LIVE</div><div class="monitor-icon">💾</div><div class="monitor-value" id="monIops">7,200</div><div class="monitor-label">IOPS</div></div>
+                </div>
+
+                <div class="charts-row">
+                    <div class="card">
+                        <div class="card-header"><span class="card-title"><span class="icon">📈</span>CPU 实时曲线</span></div>
+                        <div class="chart-container"><canvas id="cpuChart"></canvas></div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header"><span class="card-title"><span class="icon">📈</span>内存实时曲线</span></div>
+                        <div class="chart-container"><canvas id="memoryChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span class="icon">📊</span>设备实时状态</span>
+                        <div class="live-indicator">实时更新中</div>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table style="width:100%;border-collapse:collapse;font-size:13px">
+                            <thead>
+                                <tr style="border-bottom:1px solid var(--border);text-align:left">
+                                    <th style="padding:10px;color:var(--text-dim)">设备</th>
+                                    <th style="padding:10px;color:var(--text-dim)">状态</th>
+                                    <th style="padding:10px;color:var(--text-dim)">CPU</th>
+                                    <th style="padding:10px;color:var(--text-dim)">内存</th>
+                                    <th style="padding:10px;color:var(--text-dim)">存储</th>
+                                    <th style="padding:10px;color:var(--text-dim)">温度</th>
+                                    <th style="padding:10px;color:var(--text-dim)">网络</th>
+                                    <th style="padding:10px;color:var(--text-dim)">IOPS</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monitorTable">
+                                ${devices.map(d => `
+                                    <tr style="border-bottom:1px solid rgba(255,255,255,0.03)">
+                                        <td style="padding:10px">${deviceTypes[d.type].icon} ${d.id}</td>
+                                        <td style="padding:10px"><span class="badge badge-${d.status}">${d.status==='online'?'在线':d.status==='warning'?'警告':'离线'}</span></td>
+                                        <td style="padding:10px;color:${d.cpu>80?'var(--danger)':d.cpu>60?'var(--warning)':'var(--text)'}">${d.cpu}%</td>
+                                        <td style="padding:10px">${d.memory}%</td>
+                                        <td style="padding:10px">${d.storage}%</td>
+                                        <td style="padding:10px;color:${d.temp>60?'var(--danger)':'var(--text)'}">${d.temp}°C</td>
+                                        <td style="padding:10px">${(d.network/1000).toFixed(1)} GB/s</td>
+                                        <td style="padding:10px">${d.iops.toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 告警中心 ====================
+        function renderAlerts() {
+            return `
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span class="icon">🔔</span>告警中心</span>
+                        <div class="card-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="showNotification('告警统计已刷新','success')">刷新</button>
+                            <button class="btn btn-sm btn-danger" onclick="clearAllAlerts()">🗑️ 清除全部</button>
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:20px">
+                        <div style="text-align:center;padding:15px;background:rgba(239,68,68,0.1);border-radius:8px">
+                            <div style="font-size:24px;font-weight:700;color:var(--danger)">${alerts.filter(a=>a.severity==='critical').length}</div><div style="font-size:12px;color:var(--text-dim)">严重告警</div>
+                        </div>
+                        <div style="text-align:center;padding:15px;background:rgba(245,158,11,0.1);border-radius:8px">
+                            <div style="font-size:24px;font-weight:700;color:var(--warning)">${alerts.filter(a=>a.severity==='warning').length}</div><div style="font-size:12px;color:var(--text-dim)">警告</div>
+                        </div>
+                        <div style="text-align:center;padding:15px;background:rgba(0,240,255,0.05);border-radius:8px">
+                            <div style="font-size:24px;font-weight:700;color:var(--primary)">${alerts.length}</div><div style="font-size:12px;color:var(--text-dim)">总计</div>
+                        </div>
+                        <div style="text-align:center;padding:15px;background:rgba(34,197,94,0.1);border-radius:8px">
+                            <div style="font-size:24px;font-weight:700;color:var(--accent)">${devices.filter(d=>d.status==='online').length}</div><div style="font-size:12px;color:var(--text-dim)">正常设备</div>
+                        </div>
+                    </div>
+                    <div class="alerts-panel">
+                        ${alerts.map(a => `
+                            <div class="alert-item ${a.severity==='critical'?'critical':'info'}">
+                                <span class="alert-icon">${a.severity==='critical'?'🚨':'⚠️'}</span>
+                                <div class="alert-content">
+                                    <div class="alert-message">${a.message}</div>
+                                    <div class="alert-meta">${a.deviceId} · ${formatTime(a.time)}</div>
+                                </div>
+                                <div class="alert-actions">
+                                    <button class="btn btn-xs btn-primary" onclick="showDeviceDetail('${a.deviceId}')">查看设备</button>
+                                    <button class="btn btn-xs btn-secondary" onclick="dismissAlert(${a.id})">忽略</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 系统日志 ====================
+        function renderLogs() {
+            return `
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span class="icon">📝</span>系统日志</span>
+                        <div class="card-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="showNotification('日志已导出','success')">📥 导出</button>
+                            <button class="btn btn-sm btn-danger" onclick="clearLogs()">🗑️ 清除</button>
+                        </div>
+                    </div>
+                    <div class="log-container" id="logContainer">
+                        ${logs.map(l => `
+                            <div class="log-entry">
+                                <span class="log-time">[${l.time}]</span>
+                                <span class="log-level ${l.level}">${l.level.toUpperCase()}</span>
+                                ${l.msg}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 网络拓扑 ====================
+        function renderTopology() {
+            return `
+                <div class="card">
+                    <div class="card-header">
+                        <span class="card-title"><span class="icon">🌐</span>网络拓扑图</span>
+                        <div class="card-actions">
+                            <button class="btn btn-sm btn-secondary" onclick="showNotification('拓扑图已刷新','success')">🔄 刷新</button>
+                        </div>
+                    </div>
+                    <div class="topology-container">
+                        <svg class="topology-svg" id="topologySvg"></svg>
+                    </div>
+                    <div style="display:flex;gap:20px;justify-content:center;margin-top:15px;font-size:12px">
+                        <span><span style="display:inline-block;width:12px;height:12px;background:var(--primary);border-radius:50%;margin-right:5px"></span>存储节点</span>
+                        <span><span style="display:inline-block;width:12px;height:12px;background:var(--secondary);border-radius:50%;margin-right:5px"></span>计算节点</span>
+                        <span><span style="display:inline-block;width:12px;height:12px;background:var(--accent);border-radius:50%;margin-right:5px"></span>网络节点</span>
+                        <span><span style="display:inline-block;width:12px;height:12px;background:var(--danger);border-radius:50%;margin-right:5px"></span>离线设备</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 系统设置 ====================
+        function renderSettings() {
+            return `
+                <div class="card">
+                    <div class="card-header"><span class="card-title"><span class="icon">⚙️</span>系统设置</span></div>
+                    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px">
+                        <div style="padding:18px;background:rgba(0,0,0,0.2);border-radius:10px">
+                            <h4 style="margin-bottom:15px;color:var(--text-dim);font-size:14px">显示设置</h4>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+                                <span>主题模式</span>
+                                <select style="padding:5px 10px;background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+                                    <option>深色模式</option><option>浅色模式</option>
+                                </select>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+                                <span>动画效果</span>
+                                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0">
+                                <span>紧凑布局</span>
+                                <div class="toggle" onclick="this.classList.toggle('active')"></div>
+                            </div>
+                        </div>
+                        <div style="padding:18px;background:rgba(0,0,0,0.2);border-radius:10px">
+                            <h4 style="margin-bottom:15px;color:var(--text-dim);font-size:14px">监控设置</h4>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+                                <span>刷新间隔</span>
+                                <select style="padding:5px 10px;background:var(--card);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+                                    <option>2秒</option><option>5秒</option><option>10秒</option>
+                                </select>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+                                <span>告警通知</span>
+                                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0">
+                                <span>自动备份</span>
+                                <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+                            </div>
+                        </div>
+                        <div style="padding:18px;background:rgba(0,0,0,0.2);border-radius:10px">
+                            <h4 style="margin-bottom:15px;color:var(--text-dim);font-size:14px">系统信息</h4>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span>版本</span><span class="tag">v2.0.0</span></div>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span>运行时间</span><span id="uptimeDisplay">${formatUptime(uptimeSeconds)}</span></div>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0"><span>许可证</span><span class="tag">企业版</span></div>
+                        </div>
+                        <div style="padding:18px;background:rgba(0,0,0,0.2);border-radius:10px">
+                            <h4 style="margin-bottom:15px;color:var(--text-dim);font-size:14px">数据管理</h4>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span>本地存储</span><span>1.2 GB / 10 GB</span></div>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0">
+                                <span>清除缓存</span>
+                                <button class="btn btn-danger btn-sm" onclick="showNotification('缓存已清除','success')">清除</button>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;padding:10px 0">
+                                <span>重置设置</span>
+                                <button class="btn btn-secondary btn-sm" onclick="showNotification('设置已重置','success')">重置</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== 图表绘制 ====================
+        function drawChart(canvasId, data, color) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * 2;
+            canvas.height = rect.height * 2;
+            ctx.scale(2, 2);
+            const w = rect.width, h = rect.height;
+            const padding = {top: 20, right: 20, bottom: 30, left: 40};
+            const chartW = w - padding.left - padding.right;
+            const chartH = h - padding.top - padding.bottom;
+            const step = chartW / (data.length - 1);
+
+            ctx.clearRect(0, 0, w, h);
+
+            // 网格线
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const y = padding.top + (chartH / 4) * i;
+                ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(w - padding.right, y); ctx.stroke();
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.font = '10px system-ui';
+                ctx.textAlign = 'right';
+                ctx.fillText((100 - i * 25) + '%', padding.left - 5, y + 3);
+            }
+
+            // 渐变填充
+            const gradient = ctx.createLinearGradient(0, padding.top, 0, h - padding.bottom);
+            gradient.addColorStop(0, color + '30');
+            gradient.addColorStop(1, color + '00');
+
+            ctx.beginPath();
+            ctx.moveTo(padding.left, h - padding.bottom);
+            data.forEach((v, i) => {
+                const x = padding.left + i * step;
+                const y = padding.top + chartH - (v / 100) * chartH;
+                ctx.lineTo(x, y);
+            });
+            ctx.lineTo(padding.left + (data.length - 1) * step, h - padding.bottom);
+            ctx.closePath();
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // 折线
+            ctx.beginPath();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.lineJoin = 'round';
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 8;
+            data.forEach((v, i) => {
+                const x = padding.left + i * step;
+                const y = padding.top + chartH - (v / 100) * chartH;
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // 最新点
+            const lastX = padding.left + (data.length - 1) * step;
+            const lastY = padding.top + chartH - (data[data.length - 1] / 100) * chartH;
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 6, 0, Math.PI * 2);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        }
+
+        function drawGauge(canvasId, value, color) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            canvas.width = 200; canvas.height = 120;
+            const cx = 100, cy = 90, r = 70;
+
+            ctx.clearRect(0, 0, 200, 120);
+
+            // 背景弧
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, Math.PI, 0);
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.lineWidth = 12;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // 数据弧
+            const angle = Math.PI + (value / 100) * Math.PI;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, Math.PI, angle);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 12;
+            ctx.lineCap = 'round';
+            ctx.shadowColor = color;
+            ctx.shadowBlur = 10;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // 数值
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 24px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText(value + '%', cx, cy - 10);
+        }
+
+        function drawBarChart() {
+            const canvas = document.getElementById('barChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * 2;
+            canvas.height = rect.height * 2;
+            ctx.scale(2, 2);
+            const w = rect.width, h = rect.height;
+
+            const storageCount = devices.filter(d => d.type === 'storage').length;
+            const computeCount = devices.filter(d => d.type === 'compute').length;
+            const networkCount = devices.filter(d => d.type === 'network').length;
+            const maxCount = Math.max(storageCount, computeCount, networkCount);
+
+            const bars = [
+                { label: '存储节点', value: storageCount, color: '#00f0ff', icon: '💾' },
+                { label: '计算节点', value: computeCount, color: '#a855f7', icon: '💻' },
+                { label: '网络节点', value: networkCount, color: '#22c55e', icon: '🌐' }
+            ];
+
+            const barWidth = 60, gap = (w - bars.length * barWidth) / (bars.length + 1);
+            const chartH = h - 60;
+
+            ctx.clearRect(0, 0, w, h);
+
+            bars.forEach((bar, i) => {
+                const x = gap + i * (barWidth + gap);
+                const barH = (bar.value / maxCount) * (chartH - 30);
+                const y = chartH - barH;
+
+                // 柱体渐变
+                const gradient = ctx.createLinearGradient(0, y, 0, chartH);
+                gradient.addColorStop(0, bar.color);
+                gradient.addColorStop(1, bar.color + '40');
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.roundRect(x, y, barWidth, barH, 4);
+                ctx.fill();
+
+                ctx.shadowColor = bar.color;
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = bar.color;
+                ctx.fillRect(x, y, barWidth, 2);
+                ctx.shadowBlur = 0;
+
+                // 数值
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 16px system-ui';
+                ctx.textAlign = 'center';
+                ctx.fillText(bar.value, x + barWidth / 2, y - 8);
+
+                // 标签
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = '11px system-ui';
+                ctx.fillText(bar.label, x + barWidth / 2, chartH + 18);
+            });
+        }
+
+        function drawTopology() {
+            const svg = document.getElementById('topologySvg');
+            if (!svg) return;
+
+            const container = svg.parentElement;
+            const w = container.offsetWidth;
+            const h = container.offsetHeight;
+            svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+
+            const centerX = w / 2, centerY = h / 2;
+            const nodes = [];
+            const onlineDevices = devices.filter(d => d.status !== 'offline');
+
+            // 中心节点
+            nodes.push({x: centerX, y: centerY, label: '核心交换机', icon: '🔀', color: '#f59e0b'});
+
+            // 环绕节点
+            const radius = Math.min(w, h) * 0.3;
+            onlineDevices.forEach((d, i) => {
+                const angle = (i / onlineDevices.length) * Math.PI * 2 - Math.PI / 2;
+                nodes.push({
+                    x: centerX + Math.cos(angle) * radius,
+                    y: centerY + Math.sin(angle) * radius,
+                    label: d.id,
+                    icon: deviceTypes[d.type].icon,
+                    color: deviceTypes[d.type].color
+                });
+            });
+
+            let svgContent = '';
+
+            // 连接线
+            nodes.forEach((node, i) => {
+                if (i === 0) return;
+                const isActive = Math.random() > 0.3;
+                svgContent += `<line x1="${nodes[0].x}" y1="${nodes[0].y}" x2="${node.x}" y2="${node.y}"
+                    class="topology-line ${isActive ? 'active' : ''}"
+                    stroke-dasharray="${isActive ? '5 5' : 'none'}" />`;
+            });
+
+            // 节点
+            nodes.forEach((node, i) => {
+                svgContent += `
+                    <g class="topology-node" onclick="${i > 0 ? `showDeviceDetail('${node.label}')` : ''}">
+                        <circle cx="${node.x}" cy="${node.y}" r="${i === 0 ? 35 : 25}"
+                            fill="${node.color}20" stroke="${node.color}" stroke-width="2"/>
+                        <text x="${node.x}" y="${node.y + 4}" font-size="${i === 0 ? 20 : 14}" text-anchor="middle">${node.icon}</text>
+                        <text x="${node.x}" y="${node.y + (i === 0 ? 55 : 42)}" class="topology-label">${node.label}</text>
+                    </g>
+                `;
+            });
+
+            svg.innerHTML = svgContent;
+        }
+
+        // ==================== 实时更新 ====================
+        function updateRealtime() {
+            cpuHistory.push(getRandom(30, 75));
+            memoryHistory.push(getRandom(45, 80));
+            networkHistory.push(getRandom(800, 2500));
+            if (cpuHistory.length > 20) { cpuHistory.shift(); memoryHistory.shift(); networkHistory.shift(); }
+
+            devices.forEach(d => {
+                if (d.status === 'online') {
+                    d.cpu = clamp(d.cpu + getRandom(-5, 5), 5, 95);
+                    d.memory = clamp(d.memory + getRandom(-3, 3), 10, 95);
+                    d.temp = clamp(d.temp + getRandom(-2, 2), 25, 75);
+                    d.network = clamp(d.network + getRandom(-100, 100), 100, 8000);
+                    d.iops = clamp(d.iops + getRandom(-500, 500), 1000, 15000);
+                }
+            });
+
+            // 更新当前页面的数据
+            if (currentPage === 'dashboard' || currentPage === 'monitor') {
+                drawChart('cpuChart', cpuHistory, '#00f0ff');
+                drawChart('memoryChart', memoryHistory, '#a855f7');
+            }
+            if (currentPage === 'monitor') {
+                const cpuEl = document.getElementById('monCpu');
+                const memEl = document.getElementById('monMem');
+                const netEl = document.getElementById('monNet');
+                if (cpuEl) cpuEl.textContent = cpuHistory[cpuHistory.length - 1] + '%';
+                if (memEl) memEl.textContent = memoryHistory[memoryHistory.length - 1] + '%';
+                if (netEl) netEl.textContent = (networkHistory[networkHistory.length - 1] / 1000).toFixed(1) + ' GB/s';
+            }
+            if (currentPage === 'devices' || currentPage === 'monitor') {
+                renderPage(currentPage);
+            }
+        }
+
+        function addLog() {
+            const messages = [
+                {level:'info',msg:'设备状态检查完成'},
+                {level:'success',msg:'数据同步成功'},
+                {level:'warn',msg:'某设备响应延迟偏高'},
+                {level:'info',msg:'监控数据采集完成'},
+                {level:'success',msg:'健康检查通过'}
+            ];
+            const now = new Date();
+            const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+            const log = messages[Math.floor(Math.random() * messages.length)];
+            logs.push({time, ...log});
+            if (logs.length > 50) logs.shift();
+
+            if (currentPage === 'logs') {
+                const container = document.querySelector('.log-container');
+                if (container) {
+                    const entry = document.createElement('div');
+                    entry.className = 'log-entry';
+                    entry.innerHTML = `<span class="log-time">[${time}]</span><span class="log-level ${log.level}">${log.level.toUpperCase()}</span> ${log.msg}`;
+                    container.appendChild(entry);
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+        }
+
+        function updateUptime() {
+            uptimeSeconds++;
+        }
+
+        // ==================== 工具函数 ====================
+        function getRandom(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+        function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+        function formatTime(timestamp) {
+            const diff = Date.now() - timestamp;
+            const m = Math.floor(diff / 60000);
+            if (m < 1) return '刚刚';
+            if (m < 60) return m + '分钟前';
+            const h = Math.floor(m / 60);
+            return h < 24 ? h + '小时前' : Math.floor(h / 24) + '天前';
+        }
+
+        function formatUptime(seconds) {
+            const d = Math.floor(seconds / 86400);
+            const h = Math.floor((seconds % 86400) / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            return `${d}天 ${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+        }
+
+        function navigateTo(page) {
+            document.querySelectorAll('.nav-item').forEach(i => {
+                i.classList.toggle('active', i.dataset.page === page);
+            });
+            currentPage = page;
+            document.getElementById('breadcrumbCurrent').textContent = getBreadcrumbText(page);
+            renderPage(page);
+        }
+
+        // ==================== 交互功能 ====================
+        function showDeviceDetail(id) {
+            const d = devices.find(dev => dev.id === id);
+            if (!d) return;
+            const t = deviceTypes[d.type];
+
+            document.getElementById('modalTitle').textContent = '设备详情';
+            document.getElementById('modalContent').innerHTML = `
+                <div style="display:flex;align-items:center;gap:15px;margin-bottom:20px">
+                    <div class="device-icon ${d.type}" style="width:50px;height:50px;font-size:24px">${t.icon}</div>
+                    <div>
+                        <div style="font-size:18px;font-weight:600">${d.name}</div>
+                        <div style="font-size:13px;color:var(--text-dim);font-family:'Courier New',monospace">${d.id} · ${d.ip}</div>
+                    </div>
+                    <span class="badge badge-${d.status}" style="margin-left:auto">${d.status==='online'?'在线':d.status==='warning'?'警告':'离线'}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;text-align:center">
+                        <div style="font-size:20px;font-weight:700;color:var(--primary)">${d.cpu}%</div><div style="font-size:11px;color:var(--text-dim)">CPU</div>
+                        <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${d.cpu}%;background:var(--primary)"></div></div>
+                    </div>
+                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;text-align:center">
+                        <div style="font-size:20px;font-weight:700;color:var(--secondary)">${d.memory}%</div><div style="font-size:11px;color:var(--text-dim)">内存</div>
+                        <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${d.memory}%;background:var(--secondary)"></div></div>
+                    </div>
+                    <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;text-align:center">
+                        <div style="font-size:20px;font-weight:700;color:var(--accent)">${d.storage}%</div><div style="font-size:11px;color:var(--text-dim)">存储</div>
+                        <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${d.storage}%;background:var(--accent)"></div></div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px">
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:6px"><span style="color:var(--text-dim);font-size:12px">设备类型</span><div>${t.name}</div></div>
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:6px"><span style="color:var(--text-dim);font-size:12px">运行时间</span><div>${d.uptime}</div></div>
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:6px"><span style="color:var(--text-dim);font-size:12px">温度</span><div>${d.temp}°C</div></div>
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:6px"><span style="color:var(--text-dim);font-size:12px">网络带宽</span><div>${(d.network/1000).toFixed(1)} GB/s</div></div>
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:6px"><span style="color:var(--text-dim);font-size:12px">IOPS</span><div>${d.iops.toLocaleString()}</div></div>
+                </div>
+            `;
+            document.getElementById('modalFooter').innerHTML = `
+                <button class="btn btn-secondary" onclick="closeModal()">关闭</button>
+                ${d.status !== 'offline' ? `<button class="btn btn-primary" onclick="showNotification('设备 ${d.id} 重启中...','warning');closeModal()">重启</button>` : ''}
+            `;
+            document.getElementById('modalOverlay').classList.add('active');
+        }
+
+        function showAddDeviceModal() {
+            document.getElementById('modalTitle').textContent = '添加新设备';
+            document.getElementById('modalContent').innerHTML = `
+                <div style="margin-bottom:15px">
+                    <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--text-dim)">设备名称</label>
+                    <input type="text" id="newDeviceName" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,0.3);color:var(--text)" placeholder="例如: 存储节点-A7">
+                </div>
+                <div style="margin-bottom:15px">
+                    <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--text-dim)">IP 地址</label>
+                    <input type="text" id="newDeviceIp" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,0.3);color:var(--text)" placeholder="192.168.1.xxx">
+                </div>
+                <div style="margin-bottom:15px">
+                    <label style="display:block;margin-bottom:6px;font-size:13px;color:var(--text-dim)">设备类型</label>
+                    <select id="newDeviceType" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;background:rgba(0,0,0,0.3);color:var(--text)">
+                        <option value="storage">💾 存储节点</option>
+                        <option value="compute">💻 计算节点</option>
+                        <option value="network">🌐 网络节点</option>
+                    </select>
+                </div>
+            `;
+            document.getElementById('modalFooter').innerHTML = `
+                <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+                <button class="btn btn-primary" onclick="addDevice()">添加</button>
+            `;
+            document.getElementById('modalOverlay').classList.add('active');
+        }
+
+        function showSettingsModal() {
+            navigateTo('settings');
+        }
+
+        function closeModal() {
+            document.getElementById('modalOverlay').classList.remove('active');
+        }
+
+        function addDevice() {
+            const name = document.getElementById('newDeviceName')?.value;
+            const ip = document.getElementById('newDeviceIp')?.value;
+            const type = document.getElementById('newDeviceType')?.value;
+            if (!name || !ip) { showNotification('请填写完整信息', 'warning'); return; }
+
+            devices.push({
+                id: 'ARRAY-' + String(devices.length + 1).padStart(3, '0'),
+                name, ip, type, status: 'online',
+                cpu: getRandom(20, 60), memory: getRandom(40, 70),
+                storage: getRandom(30, 80), uptime: '0d 0h',
+                temp: getRandom(35, 50), network: getRandom(800, 2000),
+                iops: getRandom(3000, 8000)
+            });
+            closeModal();
+            showNotification('设备添加成功', 'success');
+            renderPage(currentPage);
+        }
+
+        function clearAllAlerts() {
+            if (confirm('确定要清除所有告警吗？')) {
+                alerts.length = 0;
+                document.getElementById('alertBadge').style.display = 'none';
+                showNotification('所有告警已清除', 'success');
+                renderPage('alerts');
+            }
+        }
+
+        function dismissAlert(id) {
+            const idx = alerts.findIndex(a => a.id === id);
+            if (idx > -1) alerts.splice(idx, 1);
+            showNotification('告警已忽略', 'success');
+            renderPage('alerts');
+        }
+
+        function clearLogs() {
+            if (confirm('确定要清除所有日志吗？')) {
+                logs.length = 0;
+                showNotification('日志已清除', 'success');
+                renderPage('logs');
+            }
+        }
+
+        function showNotification(msg, type = 'success') {
+            const container = document.getElementById('notifContainer');
+            const n = document.createElement('div');
+            n.className = `notification ${type}`;
+            const icons = {success: '✅', warning: '⚠️', error: '❌', info: 'ℹ️'};
+            n.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${msg}</span>`;
+            container.appendChild(n);
+            setTimeout(() => n.remove(), 3000);
+        }
+
+        // ==================== 事件绑定 ====================
+        document.addEventListener('DOMContentLoaded', init);
+        document.getElementById('modalOverlay').addEventListener('click', e => {
+            if (e.target.id === 'modalOverlay') closeModal();
+        });
+    </script>
+</body>
+</html>
